@@ -25,9 +25,9 @@ if getenv("BOT_TOKEN"):
 
 # Pyrogram setup
 class PyroConf(object):
-    API_ID = int(getenv("API_ID", "6"))
-    API_HASH = getenv("API_HASH", "eb06d4abfb49dc3eeb1aeb98ae0f581e")
-    BOT_TOKEN = getenv("BOT_TOKEN")
-    SESSION_STRING = getenv("SESSION_STRING")
-    OWNER_ID = int(getenv("OWNER_ID", "0")) if getenv("OWNER_ID") else None
+    API_ID = int(getenv("API_ID", "9813287"))
+    API_HASH = getenv("API_HASH", "b5de20c46fb8f2e1b4aa393dea1ffe03")
+    BOT_TOKEN = getenv("8035218066:AAHNY7-DBy5NB1p3AkKn0hIGHHpgaOk6xDU")
+    SESSION_STRING = getenv("BQCVvScAYA94rc11vGFR23oycpOumWiIbFg8brudPMcJbuQNybNO87FVlsptxV5OMSAyastDYI6R59QmsY48Bk5F6aGtDA8FvhBq72bP2JeHhU1rhivdaB3_QyAstPJntQmZph81aeHTqVcISDnBLbgqx4tTDach6cKaBXQ-xEmgCtre5MWB1VPGsjrlsi-I84g5TU0cDqLV-cv-V9Y1NUtl9RBj4vozZGYbZy0v_NOC6BkOfc0sY4QgbNYD9huRxNMgqA7ZQYjXbfWnL_sDpy97qNDptdAVzGknsH-56gWEDo_1IBeDkkp9vzyqiswNKNsWoubUwMNOvi3yVGP2x8GMUc39XQAAAAGzRo5JAA")
+    OWNER_ID = int(getenv("OWNER_ID", "7302712905")) if getenv("OWNER_ID") else None
     BOT_START_TIME = time()
