@@ -42,7 +42,7 @@ class PhoneAuthHandler:
             
             LOGGER(__name__).info(f"OTP sent to {phone_number} for user {user_id}")
             
-            return True, f"✅ **OTP sent to {phone_number}**\n\nPlease send the code using:\n`/verify <OTP_CODE>`", phone_code_hash
+            return True, f"✅ **OTP sent to {phone_number}**\n\nPlease send the code using:\n`/verify 1 2 3 4 5` (with spaces between each digit)\n\n**Example:** If code is 12345, send:\n`/verify 1 2 3 4 5`", phone_code_hash
             
         except FloodWait as e:
             LOGGER(__name__).error(f"FloodWait error: {e}")
@@ -65,11 +65,15 @@ class PhoneAuthHandler:
         phone_number = auth_data['phone_number']
         phone_code_hash = auth_data['phone_code_hash']
         
+        # Strip spaces and any non-digit characters from OTP code
+        # This allows users to enter codes like "1 2 3 4 5" or "12345"
+        cleaned_code = ''.join(filter(str.isdigit, otp_code))
+        
         try:
             await client.sign_in(
                 phone_number=phone_number,
                 phone_code_hash=phone_code_hash,
-                phone_code=otp_code
+                phone_code=cleaned_code
             )
             
             session_string = await client.export_session_string()
@@ -88,7 +92,7 @@ class PhoneAuthHandler:
             
         except PhoneCodeInvalid:
             LOGGER(__name__).error(f"Invalid OTP for user {user_id}")
-            return False, "❌ **Invalid OTP code.**\n\nPlease try again with `/verify <OTP_CODE>`\n\nOr restart the process with `/login <phone_number>`", False, None
+            return False, "❌ **Invalid OTP code.**\n\nPlease try again with `/verify 1 2 3 4 5` (spaces between digits)\n\nOr restart the process with `/login <phone_number>`", False, None
             
         except Exception as e:
             LOGGER(__name__).error(f"Error verifying OTP for user {user_id}: {e}")

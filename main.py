@@ -110,7 +110,7 @@ async def help_command(_, message: Message):
         "**It will download all posts from ID 100 to 120.**\n\n"
         "➤ **Login with Phone Number**\n"
         "   – `/login +1234567890` - Start login process\n"
-        "   – `/verify 12345` - Enter OTP code sent to your phone\n"
+        "   – `/verify 1 2 3 4 5` - Enter OTP with spaces between digits\n"
         "   – `/password your_2fa_password` - Enter 2FA password (if enabled)\n"
         "   – `/logout` - Logout from your account\n"
         "   – `/cancel` - Cancel pending authentication\n\n"
@@ -448,7 +448,9 @@ async def login_command(_, message: Message):
                 "Make sure to use international format (+ followed by country code and number)\n\n"
                 "**Example:**\n"
                 "  • `/login +1234567890`\n"
-                "  • `/login +919876543210`"
+                "  • `/login +919876543210`\n\n"
+                "**Note:** When you receive the OTP, enter it with spaces:\n"
+                "  • `/verify 1 2 3 4 5`"
             )
             return
         
@@ -475,13 +477,16 @@ async def verify_command(_, message: Message):
         if len(message.command) < 2:
             await message.reply(
                 "🔐 **Verify OTP Code**\n\n"
-                "Enter the OTP code sent to your phone.\n\n"
-                "**Usage:** `/verify 12345`\n\n"
+                "Enter the OTP code sent to your phone **with spaces between each digit**.\n\n"
+                "**Usage:** `/verify 1 2 3 4 5`\n\n"
+                "**Example:** If your code is 12345, send:\n"
+                "`/verify 1 2 3 4 5`\n\n"
                 "If you haven't received a code, start over with `/login <phone_number>`"
             )
             return
         
-        otp_code = message.command[1]
+        # Get all parts after /verify command (handles spaced format like "1 2 3 4 5")
+        otp_code = ' '.join(message.command[1:])
         user_id = message.from_user.id
         
         loading_msg = await message.reply("🔄 **Verifying OTP code...**")
