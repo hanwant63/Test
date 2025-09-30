@@ -1,0 +1,6 @@
+pyrogram==2.0.106
+TgCrypto==1.2.5
+pyleaves==1.0.2
+python-dotenv==1.0.0
+Pillow==10.1.0
+psutil==5.9.6
