@@ -42,21 +42,12 @@ bot_database.db
 logs.txt
 config.env
 
-# Media files
-Assets/*.jpg
-Assets/*.png
-Assets/*.mp4
-Assets/*.webm
-Assets/*.mp3
-
-# Keep Assets directory
-!Assets/.gitkeep
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.bak
-*.log
+# Replit specific
+.replit
+.config/
+.pythonlibs/
+.cache/
+.upm/
+poetry.lock
+pyproject.toml
+replit.nix

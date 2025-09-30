@@ -297,8 +297,8 @@ class DatabaseManager:
         user = self.get_user(user_id)
         return user and user.get('is_banned', False)
     
-    def set_user_session(self, user_id: int, session_string: str) -> bool:
-        """Set user's session string for accessing restricted content"""
+    def set_user_session(self, user_id: int, session_string: str = None) -> bool:
+        """Set user's session string for accessing restricted content (None to logout)"""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()

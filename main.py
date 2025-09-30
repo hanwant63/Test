@@ -36,6 +36,7 @@ from helpers.msg import (
 from config import PyroConf
 from logger import LOGGER
 from database import db
+from phone_auth import PhoneAuthHandler
 from access_control import admin_only, paid_or_admin_only, check_download_limit, register_user, check_user_session, get_user_client
 from admin_commands import (
     add_admin_command,
@@ -61,7 +62,10 @@ bot = Client(
 )
 
 # Client for user session
-user = Client("user_session", workers=1000, session_string=PyroConf.SESSION_STRING)
+user = Client("user_session", workers=1000, session_string=PyroConf.SESSION_STRING) if PyroConf.SESSION_STRING else None
+
+# Phone authentication handler
+phone_auth_handler = PhoneAuthHandler(PyroConf.API_ID, PyroConf.API_HASH)
 
 RUNNING_TASKS = set()
 
@@ -78,13 +82,13 @@ def track_task(coro):
 @register_user
 async def start(_, message: Message):
     welcome_text = (
-        "**Welcome Save Restricted content Bot!**\n\n"
-        "It can save Anything.\n"
-        "Just send a link,\n"
-        "or reply to a message with `/dl`.\n\n"
-        "ℹ️ Use `/help` to view all commands and examples.\n"
-        "🔒 Make sure the user client is part of the chat.\n\n"
-        "Ready? Send me a Telegram post link!"
+        "**Welcome to Save Restricted Content Bot!**\n\n"
+        "📱 **Get Started:**\n"
+        "1. Login with your phone number: `/login +1234567890`\n"
+        "2. Enter the OTP code you receive\n"
+        "3. Start downloading from your joined channels!\n\n"
+        "ℹ️ Use `/help` to view all commands and examples.\n\n"
+        "Ready? Login first with `/login <your_phone_number>`"
     )
 
     markup = InlineKeyboardMarkup(
@@ -104,9 +108,14 @@ async def help_command(_, message: Message):
         "   – Send `/bdl start_link end_link` to grab a series of posts in one go.\n"
         "     💡 Example: `/bdl https://t.me/mychannel/100 https://t.me/mychannel/120`\n"
         "**It will download all posts from ID 100 to 120.**\n\n"
+        "➤ **Login with Phone Number**\n"
+        "   – `/login +1234567890` - Start login process\n"
+        "   – `/verify 12345` - Enter OTP code sent to your phone\n"
+        "   – `/password your_2fa_password` - Enter 2FA password (if enabled)\n"
+        "   – `/logout` - Logout from your account\n"
+        "   – `/cancel` - Cancel pending authentication\n\n"
         "➤ **User Commands**\n"
-        "   – `/myinfo` - View your account information\n"
-        "   – `/setsession` - Set your session for personal access\n\n"
+        "   – `/myinfo` - View your account information\n\n"
         "➤ **Limits**\n"
         "   – Free users: 5 downloads per day\n"
         "   – Premium users: Unlimited downloads\n\n"
@@ -139,8 +148,15 @@ async def handle_download(bot: Client, message: Message, post_url: str, user_cli
         client_to_use = user_client if user_client else user
         
         # Ensure the client is started
-        if client_to_use == user and not user.is_connected:
+        if client_to_use and client_to_use == user and user and not user.is_connected:
             await user.start()
+        elif not client_to_use or (client_to_use == user and not user):
+            await message.reply(
+                "❌ **No active session found.**\n\n"
+                "Please login with your phone number:\n"
+                "`/login +1234567890`"
+            )
+            return
             
         chat_message = await client_to_use.get_messages(chat_id=chat_id, message_ids=message_id)
 
@@ -349,7 +365,7 @@ async def download_range(bot: Client, message: Message):
     )
 
 
-@bot.on_message(filters.private & ~filters.command(["start", "help", "dl", "stats", "logs", "killall", "bdl", "myinfo", "setsession", "addadmin", "removeadmin", "setpremium", "removepremium", "ban", "unban", "broadcast", "adminstats"]))
+@bot.on_message(filters.private & ~filters.command(["start", "help", "dl", "stats", "logs", "killall", "bdl", "myinfo", "login", "verify", "password", "logout", "cancel", "addadmin", "removeadmin", "setpremium", "removepremium", "ban", "unban", "broadcast", "adminstats", "userinfo"]))
 @check_download_limit
 async def handle_any_message(bot: Client, message: Message):
     if message.text and not message.text.startswith("/"):
@@ -418,46 +434,136 @@ async def my_info(_, message: Message):
     await user_info_command(_, message)
 
 
-@bot.on_message(filters.command("setsession") & filters.private)
+@bot.on_message(filters.command("login") & filters.private)
 @register_user
-async def set_session_command(_, message: Message):
-    """Allow users to set their own session string"""
+async def login_command(_, message: Message):
+    """Phone number login - Step 1: Send OTP"""
     try:
         if len(message.command) < 2:
             await message.reply(
-                "**Set Your Personal Session**\n\n"
+                "📱 **Login with Phone Number**\n\n"
                 "To access restricted content from your joined channels, "
-                "you need to provide your session string.\n\n"
-                "**Usage:** `/setsession <your_session_string>`\n\n"
-                "**How to get session string:**\n"
-                "1. Go to @SmartUtilBot\n"
-                "2. Use /pyro command\n"
-                "3. Follow the instructions\n"
-                "4. Copy the session string and send it here\n\n"
-                "⚠️ **Important:** Never share your session string with others!"
+                "login with your Telegram phone number.\n\n"
+                "**Usage:** `/login +1234567890`\n\n"
+                "Make sure to use international format (+ followed by country code and number)\n\n"
+                "**Example:**\n"
+                "  • `/login +1234567890`\n"
+                "  • `/login +919876543210`"
             )
             return
         
-        session_string = message.command[1]
+        phone_number = message.command[1]
         user_id = message.from_user.id
         
-        # Basic validation
-        if len(session_string) < 50:
-            await message.reply("❌ **Invalid session string. Session strings are much longer.**")
-            return
+        loading_msg = await message.reply("📤 **Sending OTP code...**")
         
-        if db.set_user_session(user_id, session_string):
-            await message.reply(
-                "✅ **Session string saved successfully!**\n\n"
-                "You can now download content from channels you've joined. "
-                "Your personal session will be used for downloads."
-            )
-        else:
-            await message.reply("❌ **Failed to save session string. Please try again.**")
-    
+        success, msg, _ = await phone_auth_handler.send_otp(user_id, phone_number)
+        
+        await loading_msg.delete()
+        await message.reply(msg)
+        
     except Exception as e:
         await message.reply(f"❌ **Error: {str(e)}**")
-        LOGGER(__name__).error(f"Error in set_session_command: {e}")
+        LOGGER(__name__).error(f"Error in login_command: {e}")
+
+
+@bot.on_message(filters.command("verify") & filters.private)
+@register_user
+async def verify_command(_, message: Message):
+    """Phone number login - Step 2: Verify OTP"""
+    try:
+        if len(message.command) < 2:
+            await message.reply(
+                "🔐 **Verify OTP Code**\n\n"
+                "Enter the OTP code sent to your phone.\n\n"
+                "**Usage:** `/verify 12345`\n\n"
+                "If you haven't received a code, start over with `/login <phone_number>`"
+            )
+            return
+        
+        otp_code = message.command[1]
+        user_id = message.from_user.id
+        
+        loading_msg = await message.reply("🔄 **Verifying OTP code...**")
+        
+        result = await phone_auth_handler.verify_otp(user_id, otp_code)
+        
+        await loading_msg.delete()
+        
+        if len(result) == 4:
+            success, msg, needs_2fa, session_string = result
+            if success and session_string:
+                db.set_user_session(user_id, session_string)
+            await message.reply(msg)
+        else:
+            success, msg, needs_2fa = result
+            await message.reply(msg)
+        
+    except Exception as e:
+        await message.reply(f"❌ **Error: {str(e)}**")
+        LOGGER(__name__).error(f"Error in verify_command: {e}")
+
+
+@bot.on_message(filters.command("password") & filters.private)
+@register_user
+async def password_command(_, message: Message):
+    """Phone number login - Step 3: Verify 2FA password"""
+    try:
+        if len(message.command) < 2:
+            await message.reply(
+                "🔐 **Verify 2FA Password**\n\n"
+                "Enter your Two-Factor Authentication password.\n\n"
+                "**Usage:** `/password <your_2fa_password>`\n\n"
+                "⚠️ **Security Note:** Your password will be deleted immediately after verification."
+            )
+            return
+        
+        password = message.text.split(maxsplit=1)[1]
+        user_id = message.from_user.id
+        
+        try:
+            await message.delete()
+        except:
+            pass
+        
+        loading_msg = await message.reply("🔄 **Verifying 2FA password...**")
+        
+        success, msg, session_string = await phone_auth_handler.verify_2fa_password(user_id, password)
+        
+        await loading_msg.delete()
+        
+        if success and session_string:
+            db.set_user_session(user_id, session_string)
+        
+        await message.reply(msg)
+        
+    except Exception as e:
+        await message.reply(f"❌ **Error: {str(e)}**")
+        LOGGER(__name__).error(f"Error in password_command: {e}")
+
+
+@bot.on_message(filters.command("logout") & filters.private)
+@register_user
+async def logout_command(_, message: Message):
+    """Logout from account"""
+    user_id = message.from_user.id
+    
+    if db.set_user_session(user_id, None):
+        await message.reply(
+            "✅ **Logged out successfully!**\n\n"
+            "Your session has been removed. Use `/login <phone_number>` to login again."
+        )
+    else:
+        await message.reply("❌ **Failed to logout. Please try again.**")
+
+
+@bot.on_message(filters.command("cancel") & filters.private)
+@register_user
+async def cancel_command(_, message: Message):
+    """Cancel pending authentication"""
+    user_id = message.from_user.id
+    success, msg = await phone_auth_handler.cancel_auth(user_id)
+    await message.reply(msg)
 
 
 # Admin Commands
@@ -532,11 +638,12 @@ if __name__ == "__main__":
             db.add_admin(PyroConf.OWNER_ID, PyroConf.OWNER_ID)
             LOGGER(__name__).info(f"Added owner {PyroConf.OWNER_ID} as admin")
         
-        # Start the user client if session is provided
-        if PyroConf.SESSION_STRING:
+        # Start the user client if valid session is provided
+        if user and PyroConf.SESSION_STRING and len(PyroConf.SESSION_STRING) > 50 and not PyroConf.SESSION_STRING.startswith("your_"):
             user.start()
+            LOGGER(__name__).info("User client started successfully")
         else:
-            LOGGER(__name__).warning("No SESSION_STRING provided - some features may not work")
+            LOGGER(__name__).warning("No valid SESSION_STRING provided - users must login with phone number")
         bot.run()
     except KeyboardInterrupt:
         pass
